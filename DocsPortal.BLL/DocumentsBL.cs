@@ -1,5 +1,7 @@
 ﻿using DocsPortal.BLL.Context;
 using DocsPortal.Library;
+using Microsoft.Extensions.Caching.Distributed;
+using System.Text.Json;
 
 namespace DocsPortal.BLL
 {
@@ -9,11 +11,16 @@ namespace DocsPortal.BLL
 
         public DocumentDTO? GetDocument(Guid uid)
         {
+            string cacheKey = GetCacheKey("document", uid);
+            string? cachedDocument = GetRedisValue(cacheKey);
+            if (!string.IsNullOrEmpty(cachedDocument))
+                return JsonSerializer.Deserialize<DocumentDTO>(cachedDocument);
+
             var document = Context.DALContext.DocumentsDAL.GetDocument(uid);
             if (document == null)
                 return null;
 
-            return new DocumentDTO
+            var documentDto = new DocumentDTO
             {
                 DocumentUid = document.DocumentGUID,
                 Title = document.Title,
@@ -22,11 +29,16 @@ namespace DocsPortal.BLL
                 CreatedAt = document.CreatedAt,
                 UpdatedAt = document.UpdatedAt
             };
+
+            SetRedisValue(cacheKey, JsonSerializer.Serialize(documentDto));
+
+            return documentDto;
         }
 
         public List<DocumentDTO> GetAllDocuments()
         {
             var documents = Context.DALContext.DocumentsDAL.GetAllDocuments();
+
             return documents.Select(doc => new DocumentDTO
             {
                 DocumentUid = doc.DocumentGUID,
@@ -42,13 +54,14 @@ namespace DocsPortal.BLL
         {
             var document = new DAL.Models.Document
             {
-                DocumentGUID = Guid.NewGuid(),
+                DocumentGUID = documentDto.DocumentUid,
                 Title = documentDto.Title,
                 Content = documentDto.Content,
                 Version = 1, // Initial version
                 CreatedAt = DateTime.Now,
                 UpdatedAt = DateTime.Now
             };
+
             Context.DALContext.DocumentsDAL.AddDocument(document);
         }
 
@@ -62,11 +75,14 @@ namespace DocsPortal.BLL
                 Version = documentDto.Version + 1, // Increment version
                 UpdatedAt = DateTime.Now
             };
+
+            Context.Cache.Remove(GetCacheKey("document", document.DocumentGUID));
             Context.DALContext.DocumentsDAL.UpdateDocument(document);
         }
 
         public void DeleteDocument(Guid uid)
         {
+            Context.Cache.Remove(GetCacheKey("document", uid));
             Context.DALContext.DocumentsDAL.DeleteDocument(uid);
         }
     }

@@ -1,6 +1,7 @@
 using DocsPortal.BLL.Context;
 using DocsPortal.DAL.Context;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
@@ -10,7 +11,19 @@ builder.Services.AddDbContext<StorageContext>(opts =>
         sqlOpts => sqlOpts.EnableRetryOnFailure()
     )
 );
-builder.Services.AddScoped<BLContext>();
+
+builder.Services.AddStackExchangeRedisCache(opts =>
+{
+    opts.Configuration = builder.Configuration.GetConnectionString("redis");
+    opts.InstanceName = "DocsPortalCache:";
+});
+
+builder.Services.AddScoped<BLContext>(provider =>
+    new BLContext(
+        provider.GetRequiredService<DALContext>(),
+        provider.GetRequiredService<IDistributedCache>()
+    )
+);
 builder.Services.AddScoped<DALContext>();
 
 builder.AddServiceDefaults();
