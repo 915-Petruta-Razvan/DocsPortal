@@ -1,6 +1,8 @@
+using Azure.Storage.Blobs;
 using DocsPortal.BLL.Context;
 using DocsPortal.DAL.Context;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Azure;
 using Microsoft.Extensions.Caching.Distributed;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
@@ -18,10 +20,16 @@ builder.Services.AddStackExchangeRedisCache(opts =>
     opts.InstanceName = "DocsPortalCache:";
 });
 
+builder.Services.AddAzureClients(clients =>
+{
+    clients.AddBlobServiceClient(builder.Configuration.GetConnectionString("blobs"));
+});
+
 builder.Services.AddScoped<BLContext>(provider =>
     new BLContext(
         provider.GetRequiredService<DALContext>(),
-        provider.GetRequiredService<IDistributedCache>()
+        provider.GetRequiredService<IDistributedCache>(),
+        provider.GetRequiredService<BlobServiceClient>()
     )
 );
 builder.Services.AddScoped<DALContext>();
